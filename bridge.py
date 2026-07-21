@@ -77,13 +77,17 @@ def ssdp_listener():
         pass
     
     print(f"Broadcasting fake lamp profile to {MCAST_GRP}:{MCAST_PORT} every 2 seconds...")
+    print(f"Also sending direct unicast to {LOCAL_IP}:{MCAST_PORT}...")
     
     # Run a sub-thread to continuously announce the lamp
     def announce():
         while True:
             try:
-                # Blast the fake profile to multicast so the Official App catches it
+                # Multicast
                 broadcast_sock.sendto(get_ssdp_reply(), (MCAST_GRP, MCAST_PORT))
+                # Direct Unicast to the Official App (bypasses all multicast loopback issues)
+                broadcast_sock.sendto(get_ssdp_reply(), (LOCAL_IP, MCAST_PORT))
+                broadcast_sock.sendto(get_ssdp_reply(), ('127.0.0.1', MCAST_PORT))
             except Exception as e:
                 pass
             time.sleep(2)
