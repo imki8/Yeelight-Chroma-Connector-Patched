@@ -149,41 +149,16 @@ void CUdpLight::ProcRecvData(char* recv_data)
 
 bool CUdpLight::AcquireToken()
 {
-	//is connected to the device
 	if (this->bConnectStat == false)
 	{
 		return false;
 	}
 
-	//send acquire msg to the device
-	char sendBuf[200] = {0};
-	int len;
-	char method_name[30] = {0};
-
-	switch (this->cProtocolVer)
-	{
-	case 1:
-		strcpy_s(method_name, "udp_new");
-		break;
-	case 2:
-		strcpy_s(method_name, "udp_sess_new");
-		break;
-	default:
-		break;
-	}
-
-	len = snprintf(sendBuf,
-		sizeof(sendBuf),
-		"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [] }\r\n", this->msg_id, method_name);
-
-	CString strIP(this->cIP);
-	int ret = this->SendTo(sendBuf, (int)strlen(sendBuf), LAN_SERVER_UDP_PORT, strIP, 0);
-
-	if (this->msg_id++ < 0)
-	{
-		this->msg_id = 1;
-	}
-
+	// Bypass token handshake: force CONNECTED state immediately.
+	// Xiaomi/non-Chroma lamps don't implement the udp_new handshake.
+	memset(this->cToken, 'x', 32); // fake token so cToken[0] != 0
+	this->cToken[32] = '\0';
+	this->udp_light_state = UDP_STATE_CONNECTED;
 	return true;
 }
 
@@ -229,31 +204,19 @@ void CUdpLight::SendKplMsg()
 
 bool CUdpLight::IsAllowedSendCtrlMsg()
 {
-	bool ret = false;
-
 	if (this->bConnectStat != TRUE)
 	{
-		return ret;
-	}
-
-	if (this->udp_light_state != UDP_STATE_CONNECTED)
-	{
-		return ret;
+		return false;
 	}
 
 	if (this->bAllowCtrlFlag != TRUE)
 	{
-		return ret;
-	}
-
-	if (this->cToken[0] == 0)
-	{
-		return ret;
+		return false;
 	}
 
 	if (this->PreviewIngFlag == 1)
 	{
-		return ret;
+		return false;
 	}
 
 	return true;
