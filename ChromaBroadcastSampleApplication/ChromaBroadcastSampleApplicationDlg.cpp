@@ -1685,10 +1685,11 @@ bool CChromaBroadcastSampleApplicationDlg::RefreshLightList(CUdpLight& UdpLight)
 		return false;
 	}
 	CString strIP(UdpLight.cIP);
-	if (UdpLight.Create(0, SOCK_DGRAM, FD_READ | FD_WRITE, NULL) == TRUE)
+	if (UdpLight.Create(0, SOCK_STREAM, FD_READ | FD_WRITE | FD_CONNECT, NULL) == TRUE)
 	{
 		UdpLight.bConnectStat = true;
 		UdpLight.udp_light_state = UDP_STATE_CREAT_SOCKET;
+		UdpLight.Connect(strIP, UdpLight.iPort);
 	}
 	else
 	{
@@ -1785,10 +1786,9 @@ void CChromaBroadcastSampleApplicationDlg::SendBrightneesToLight(CUdpLight& UdpL
 
 	len = snprintf(sendBuf,
 		sizeof(sendBuf),
-		"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [%d, \"sudden\", 0], \"token\":\"%s\" }\r\n", UdpLight.msg_id, method_name, UdpLight.ucBright, UdpLight.cToken);
+		"{\"id\":%d,\"method\":\"%s\",\"params\":[%d,\"smooth\",500]}\r\n", UdpLight.msg_id, method_name, UdpLight.ucBright);
 
-	CString strIP(UdpLight.cIP);
-	int ret = UdpLight.SendTo(sendBuf, (int)strlen(sendBuf), LAN_SERVER_UDP_PORT, strIP, 0);
+	int ret = UdpLight.Send(sendBuf, len, 0);
 
 	if (UdpLight.msg_id++ < 0)
 	{

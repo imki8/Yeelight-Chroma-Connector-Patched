@@ -40,6 +40,7 @@ public:
 	virtual void OnOutOfBandData(int nErrorCode);
 	virtual void OnReceive(int nErrorCode);
 	virtual void OnSend(int nErrorCode);
+	virtual void OnConnect(int nErrorCode);
 	bool AcquireToken();
 	void SendKplMsg();
 

@@ -95,111 +95,33 @@ void CUdpLight::OnSend(int nErrorCode)
 }
 
 
+void CUdpLight::OnConnect(int nErrorCode)
+{
+	if (nErrorCode == 0)
+	{
+		// TCP connection established — mark as ready immediately
+		this->udp_light_state = UDP_STATE_CONNECTED;
+		this->iSendKplCount = 0;
+	}
+	CAsyncSocket::OnConnect(nErrorCode);
+}
+
 void CUdpLight::ProcRecvData(char* recv_data)
 {
-	//todo use json lib
-	//Json::Value root;
-	//Json::Reader reader;
-	//proc msg = {"id":2,"method":"udp_token","params":{"token":"1420cc0cfd377cf441181585db77611c"}}
-
-	char method_name[30] = { 0 };
-
-	switch (this->cProtocolVer)
-	{
-	case 1:
-		strcpy_s(method_name, "udp_token");
-		break;
-	case 2:
-		strcpy_s(method_name, "udp_sess_token");
-		break;
-	default:
-		break;
-	}
-
-	if (strstr(recv_data, method_name) != NULL)
-	{
-		char* p_token = NULL;
-		p_token = strstr(recv_data, "token\":");
-		if (p_token == NULL)
-		{
-			return;
-		}
-		memcpy(this->cToken, p_token + 8, 32);
-		this->iSendKplCount = 0;
-		this->udp_light_state = UDP_STATE_CONNECTED;
-	}
-	else if (strstr(recv_data, "token") != NULL)
-	{
-		if (strstr(recv_data, "first") != NULL)
-		{
-			return;
-		}
-		char* p_token = NULL;
-		p_token = strstr(recv_data, "token\":");
-		if (p_token == NULL)
-		{
-			return;
-		}
-		else if (strstr(p_token, this->cToken) != NULL)
-		{
-			this->iSendKplCount = 0;
-		}
-	}
+	// Standard Yeelight LAN protocol — no token handshake needed
 }
 
 bool CUdpLight::AcquireToken()
 {
-	if (this->bConnectStat == false)
-	{
-		return false;
-	}
-
-	// Bypass token handshake: force CONNECTED state immediately.
-	// Xiaomi/non-Chroma lamps don't implement the udp_new handshake.
-	memset(this->cToken, 'x', 32); // fake token so cToken[0] != 0
-	this->cToken[32] = '\0';
-	this->udp_light_state = UDP_STATE_CONNECTED;
+	// TCP connection is established asynchronously via OnConnect.
+	// Nothing to do here.
 	return true;
 }
 
 
 void CUdpLight::SendKplMsg()
 {
-	//is connected to the device
-	if (this->bConnectStat == false)
-	{
-		return;
-	}
-
-	//send keep alive msg to the device
-	char sendBuf[200];
-	int len;
-
-	char method_name[30] = { 0 };
-
-	switch (this->cProtocolVer)
-	{
-	case 1:
-		strcpy_s(method_name, "udp_keep_alive");
-		break;
-	case 2:
-		strcpy_s(method_name, "udp_sess_keep_alive");
-		break;
-	default:
-		break;
-	}
-
-	len = snprintf(sendBuf,
-		sizeof(sendBuf),
-		"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [\"keeplive_interval\",\"10\"],\"token\":\"%s\" }\r\n", this->msg_id, method_name, this->cToken);
-
-	CString strIP(this->cIP);
-	int ret = this->SendTo(sendBuf, (int)strlen(sendBuf), LAN_SERVER_UDP_PORT, strIP, 0);
-
-	if (this->msg_id++ < 0)
-	{
-		this->msg_id = 1;
-	}
+	// Keep-alive not needed for standard TCP Yeelight LAN protocol
 }
 
 bool CUdpLight::IsAllowedSendCtrlMsg()
@@ -225,134 +147,69 @@ bool CUdpLight::IsAllowedSendCtrlMsg()
 
 void CUdpLight::SendCtrlMsgSwitchPower(bool SwitchStatus, char* effect, int duration)
 {
-	char method_name[30] = { 0 };
 	char sendBuf[200];
 	int len;
 
-	if (this->SwitchStatus == 1)//no need to send power off again
+	if (this->SwitchStatus == 1)
 	{
 		return;
 	}
-	switch (this->cDeviceType)
-	{
-	case 0://normal device
-		strcpy_s(method_name, "set_power");
-		break;
-	case 1://bg device
-	case 2://bg_device enable bg_set_scene (diable set_scene_bundle)
-		strcpy_s(method_name, "bg_set_power");
-		break;
-	default:
-		break;
-	}
+
 	len = snprintf(sendBuf, sizeof(sendBuf),
-		"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [\"off\", \"%s\", %d], \"token\":\"%s\" }\r\n",
-		this->msg_id,
-		method_name,
-		effect,
-		duration,
-		this->cToken);
+		"{\"id\":%d,\"method\":\"set_power\",\"params\":[\"off\",\"%s\",%d]}\r\n",
+		this->msg_id, effect, duration);
 
-	this->SwitchStatus = 1;//off
+	this->SwitchStatus = 1;
+	this->Send(sendBuf, len, 0);
 
-	CString strIP(this->cIP);
-	int ret = this->SendTo(sendBuf, (int)strlen(sendBuf), LAN_SERVER_UDP_PORT, strIP, 0);
-
-	if (this->msg_id++ < 0)
-	{
-		this->msg_id = 1;
-	}
+	if (this->msg_id++ < 0) this->msg_id = 1;
 }
 
-//{"id":1,"method":"set_scene","params":["color",65537,100,1000,"smooth"]}
+//{"id":1,"method":"set_rgb","params":[16711680,"smooth",200]}
 void CUdpLight::SendCtrlMsgSetScene(COLORREF color, int bright, char* effect, int duration)
 {
-	char method_name[30] = { 0 };
-	char sendBuf[200];
+	char sendBuf[300];
 	int len;
 
-	switch (this->cDeviceType)
+	// Convert COLORREF (BGR) to RGB integer
+	int r = GetRValue(color);
+	int g = GetGValue(color);
+	int b = GetBValue(color);
+	int rgb = (r << 16) | (g << 8) | b;
+
+	// First ensure the lamp is on
+	if (this->SwitchStatus == 1)
 	{
-	case 0:
-		strcpy_s(method_name, "set_scene");
-		//{"id":1,"method":"set_scene","params":["color",65537,100,1000,"smooth"]}
-		len = snprintf(sendBuf, sizeof(sendBuf),
-			"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [\"color\",%d, %d, %d, \"%s\"], \"token\":\"%s\" }\r\n",
-			this->msg_id,
-			method_name,
-			color,
-			bright,
-			duration,
-			effect,
-			this->cToken);
-		break;
-	case 1:
-		if (this->SwitchStatus == 1)//if off first open it
-		{
-			strcpy_s(method_name, "bg_set_power");
-			len = snprintf(sendBuf,
-				sizeof(sendBuf),
-				"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [\"on\"], \"token\":\"%s\" }\r\n",
-				this->msg_id,
-				method_name,
-				this->cToken);
-		}
-		else
-		{
-			strcpy_s(method_name, "bg_set_rgb");
-			len = snprintf(sendBuf,
-				sizeof(sendBuf),
-				"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [%d, \"sudden\", 0], \"token\":\"%s\" }\r\n",
-				this->msg_id,
-				method_name,
-				color,
-				this->cToken);
-		}
-		break;
-	case 2:
-		strcpy_s(method_name, "bg_set_scene");
-		//{"id":1,"method":"set_scene","params":["color",65537,100,1000,"smooth"]}
-		len = snprintf(sendBuf, sizeof(sendBuf),
-			"{ \"id\":%d, \"method\" : \"%s\", \"params\" : [\"color\",%d, %d, %d, \"%s\"], \"token\":\"%s\" }\r\n",
-			this->msg_id,
-			method_name,
-			color,
-			bright,
-			duration,
-			effect,
-			this->cToken);
-		break;
-	default:
-		break;
+		char powerBuf[200];
+		int powerLen = snprintf(powerBuf, sizeof(powerBuf),
+			"{\"id\":%d,\"method\":\"set_power\",\"params\":[\"on\",\"sudden\",0]}\r\n",
+			this->msg_id);
+		this->Send(powerBuf, powerLen, 0);
+		if (this->msg_id++ < 0) this->msg_id = 1;
+		this->SwitchStatus = 0;
 	}
 
-	this->SwitchStatus = 0;//on
+	// Set color using set_rgb
+	len = snprintf(sendBuf, sizeof(sendBuf),
+		"{\"id\":%d,\"method\":\"set_rgb\",\"params\":[%d,\"%s\",%d]}\r\n",
+		this->msg_id, rgb, effect, duration);
 
-	CString strIP(this->cIP);
-	int ret = this->SendTo(sendBuf, (int)strlen(sendBuf), LAN_SERVER_UDP_PORT, strIP, 0);
+	this->Send(sendBuf, len, 0);
 
-	if (this->msg_id++ < 0)
-	{
-		this->msg_id = 1;
-	}
+	if (this->msg_id++ < 0) this->msg_id = 1;
 }
 
 void CUdpLight::SendCtrlMsgPreview()
 {
-	char sendBuf[200];
+	char sendBuf[300];
 	int len;
 
-	len = snprintf(sendBuf,
-		sizeof(sendBuf),
-		"{ \"id\":%d, \"method\" : \"set_scene\", \"params\" : [\"cf\", 6, 0, \"600, 2, 4000, 70, 400, 2, 4000, 1\"], \"token\":\"%s\" }\r\n",
-		this->msg_id,
-		this->cToken);
+	// Flash red then blue as a preview
+	len = snprintf(sendBuf, sizeof(sendBuf),
+		"{\"id\":%d,\"method\":\"start_cf\",\"params\":[4,0,\"500,1,16711680,100,500,1,255,100,500,1,65280,100,500,1,16776960,100\"]}\r\n",
+		this->msg_id);
 
-	CString strIP(this->cIP);
-	int ret = this->SendTo(sendBuf, (int)strlen(sendBuf), LAN_SERVER_UDP_PORT, strIP, 0);
+	this->Send(sendBuf, len, 0);
 
-	if (this->msg_id++ < 0)
-	{
-		this->msg_id = 1;
-	}
+	if (this->msg_id++ < 0) this->msg_id = 1;
 }
