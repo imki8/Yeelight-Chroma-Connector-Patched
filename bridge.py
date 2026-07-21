@@ -50,28 +50,44 @@ def get_tcp_socket():
     return tcp_socket
 
 def ssdp_listener():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sock.bind(('', MCAST_PORT))
+    # Socket for broadcasting our presence
+    broadcast_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    broadcast_sock.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_TTL, 2)
+    
+    # We also listen just in case
+    listen_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM, socket.IPPROTO_UDP)
+    listen_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listen_sock.bind(('', MCAST_PORT))
     mreq = struct.pack("4sl", socket.inet_aton(MCAST_GRP), socket.INADDR_ANY)
     try:
-        sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
+        listen_sock.setsockopt(socket.IPPROTO_IP, socket.IP_ADD_MEMBERSHIP, mreq)
     except:
-        pass # Might fail on some windows setups if default route is missing, but usually works
+        pass
     
-    print(f"Listening for SSDP Discovery on {MCAST_GRP}:{MCAST_PORT}...")
+    print(f"Broadcasting fake lamp profile to {MCAST_GRP}:{MCAST_PORT} every 2 seconds...")
+    
+    # Run a sub-thread to continuously announce the lamp
+    def announce():
+        while True:
+            try:
+                # Blast the fake profile to multicast so the Official App catches it
+                broadcast_sock.sendto(ssdp_reply, (MCAST_GRP, MCAST_PORT))
+            except Exception as e:
+                pass
+            time.sleep(2)
+            
+    threading.Thread(target=announce, daemon=True).start()
     
     while True:
         try:
-            data, addr = sock.recvfrom(1024)
+            data, addr = listen_sock.recvfrom(1024)
             msg = data.decode('utf-8', errors='ignore')
             if "M-SEARCH" in msg and "wifi_bulb" in msg:
-                # The official app sends discovery, we reply with our fake profile
                 resp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
                 resp_sock.sendto(ssdp_reply, addr)
                 resp_sock.close()
         except Exception as e:
-            print(f"SSDP Error: {e}")
+            time.sleep(1)
 
 def udp_proxy():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
