@@ -12,27 +12,39 @@ BRIDGE_UDP_PORT = 55444
 MCAST_GRP = '239.255.255.250'
 MCAST_PORT = 1982
 
-# Fake SSDP Response to trick the Official App
-ssdp_reply = (
-    "HTTP/1.1 200 OK\r\n"
-    "Cache-Control: max-age=3600\r\n"
-    "Date: \r\n"
-    "Ext: \r\n"
-    "Location: yeelight://127.0.0.1:{}\r\n"
-    "Server: POSIX UPnP/1.0 YGLC/1\r\n"
-    "id: 0x0000000012a297c3\r\n"
-    "model: color\r\n"
-    "fw_ver: 35\r\n"
-    "support: get_prop set_default set_power toggle set_bright start_cf stop_cf set_scene cron_add cron_get cron_del set_ct_abx udp_sess_new udp_sess_keep_alive udp_new bg_set_rgb bg_set_scene\r\n"
-    "power: on\r\n"
-    "bright: 100\r\n"
-    "color_mode: 1\r\n"
-    "ct: 4000\r\n"
-    "rgb: 16711680\r\n"
-    "hue: 100\r\n"
-    "sat: 100\r\n"
-    "name: RazerBridge\r\n\r\n"
-).format(BRIDGE_UDP_PORT).encode('utf-8')
+def get_lan_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
+LOCAL_IP = get_lan_ip()
+
+def get_ssdp_reply():
+    return (
+        "HTTP/1.1 200 OK\r\n"
+        "Cache-Control: max-age=3600\r\n"
+        "Date: \r\n"
+        "Ext: \r\n"
+        f"Location: yeelight://{LOCAL_IP}:{BRIDGE_UDP_PORT}\r\n"
+        "Server: POSIX UPnP/1.0 YGLC/1\r\n"
+        "id: 0x0000000012345678\r\n"
+        "model: color\r\n"
+        "fw_ver: 35\r\n"
+        "support: get_prop set_default set_power toggle set_bright start_cf stop_cf set_scene cron_add cron_get cron_del set_ct_abx udp_sess_new udp_sess_keep_alive udp_new bg_set_rgb bg_set_scene\r\n"
+        "power: on\r\n"
+        "bright: 100\r\n"
+        "color_mode: 1\r\n"
+        "ct: 4000\r\n"
+        "rgb: 16711680\r\n"
+        "hue: 100\r\n"
+        "sat: 100\r\n"
+        "name: RazerBridge\r\n\r\n"
+    ).encode('utf-8')
 
 tcp_socket = None
 
@@ -71,7 +83,7 @@ def ssdp_listener():
         while True:
             try:
                 # Blast the fake profile to multicast so the Official App catches it
-                broadcast_sock.sendto(ssdp_reply, (MCAST_GRP, MCAST_PORT))
+                broadcast_sock.sendto(get_ssdp_reply(), (MCAST_GRP, MCAST_PORT))
             except Exception as e:
                 pass
             time.sleep(2)
@@ -84,7 +96,7 @@ def ssdp_listener():
             msg = data.decode('utf-8', errors='ignore')
             if "M-SEARCH" in msg and "wifi_bulb" in msg:
                 resp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-                resp_sock.sendto(ssdp_reply, addr)
+                resp_sock.sendto(get_ssdp_reply(), addr)
                 resp_sock.close()
         except Exception as e:
             time.sleep(1)
