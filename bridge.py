@@ -125,7 +125,7 @@ def ssdp_listener():
 
 def udp_proxy():
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.bind(('127.0.0.1', BRIDGE_UDP_PORT))
+    sock.bind(('0.0.0.0', BRIDGE_UDP_PORT))
     print(f"Listening for UDP Commands from Official App on port {BRIDGE_UDP_PORT}...")
     
     while True:
@@ -145,6 +145,7 @@ def udp_proxy():
                     msg_id = j.get("id", 1)
                     reply = json.dumps({"id": msg_id, "result": ["token123"]}) + "\r\n"
                     sock.sendto(reply.encode('utf-8'), addr)
+                    print(f"Successfully answered token request from Official App!")
                     continue
                 elif method == "udp_sess_keep_alive":
                     msg_id = j.get("id", 1)
@@ -180,19 +181,23 @@ def udp_proxy():
             print(f"UDP Proxy Error: {e}")
 
 if __name__ == '__main__':
-    print("==========================================")
-    print("       Yeelight Razer Bridge active       ")
-    print(f"   Target Lamp: {REAL_LAMP_IP}:{REAL_LAMP_TCP_PORT} ")
-    print("==========================================")
-    print("1. Leave this window open.")
-    print("2. Open the OFFICIAL Yeelight Chroma Connector.")
-    print("3. The lamp 'RazerBridge' should appear.")
-    print("4. Check 'Enable Chroma' and enjoy!")
-    print("==========================================")
-    
-    # Start SSDP thread
-    t1 = threading.Thread(target=ssdp_listener, daemon=True)
-    t1.start()
-    
-    # Run UDP proxy in main thread
-    udp_proxy()
+    try:
+        print("==========================================")
+        print("       Yeelight Razer Bridge active       ")
+        print(f"   Target Lamp: {REAL_LAMP_IP}:{REAL_LAMP_TCP_PORT} ")
+        print("==========================================")
+        print("1. Leave this window open.")
+        print("2. Open the OFFICIAL Yeelight Chroma Connector.")
+        print("3. Check 'Enable Chroma' and enjoy!")
+        print("==========================================")
+        
+        # Start SSDP thread
+        t1 = threading.Thread(target=ssdp_listener, daemon=True)
+        t1.start()
+        
+        # Run UDP proxy in main thread
+        udp_proxy()
+    except Exception as e:
+        print(f"\n[CRASH] Erreur fatale: {e}")
+        print("Si l'erreur dit 'Only one usage of each socket address', c'est que l'ancien bridge tourne encore en fond ! Redémarrez le PC ou fermez-le dans le gestionnaire des tâches.")
+        input("Appuyez sur Entrée pour quitter...")
