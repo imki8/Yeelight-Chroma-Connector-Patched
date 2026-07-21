@@ -1539,28 +1539,26 @@ void CChromaBroadcastSampleApplicationDlg::LightSessionCheck()
 	for (it = udp_light_vect.begin(); it != udp_light_vect.end(); it++)
 	{
 		pFoundLight = *it;
-		if (pFoundLight->iSendKplCount++ > 2)
-		{
-			pFoundLight->udp_light_state = UDP_STATE_DISCONNECT;
-			pFoundLight->iSendKplCount = 0;
-		}
 
 		switch (pFoundLight->udp_light_state)
 		{
 		case UDP_STATE_IDLE:
 		case UDP_STATE_DISCONNECT:
+			// Reconnect using TCP
 			pFoundLight->Close();
-			if (pFoundLight->Create(0, SOCK_DGRAM, FD_READ | FD_WRITE, NULL) == TRUE)
+			if (pFoundLight->Create(0, SOCK_STREAM, FD_READ | FD_WRITE | FD_CONNECT, NULL) == TRUE)
 			{
+				pFoundLight->bConnectStat = true;
 				pFoundLight->udp_light_state = UDP_STATE_CREAT_SOCKET;
-				pFoundLight->AcquireToken();//update token
+				CString strIP(pFoundLight->cIP);
+				pFoundLight->Connect(strIP, pFoundLight->iPort);
 			}
 			break;
 		case UDP_STATE_CREAT_SOCKET:
-			pFoundLight->AcquireToken();//update token
+			// Waiting for OnConnect callback - nothing to do
 			break;
 		case UDP_STATE_CONNECTED:
-			pFoundLight->SendKplMsg();
+			// TCP connection alive - nothing to do (no keep-alive needed)
 			break;
 		default:
 			break;
