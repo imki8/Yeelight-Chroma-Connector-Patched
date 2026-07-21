@@ -76,18 +76,36 @@ def ssdp_listener():
     except:
         pass
     
-    print(f"Broadcasting fake lamp profile to {MCAST_GRP}:{MCAST_PORT} every 2 seconds...")
-    print(f"Also sending direct unicast to {LOCAL_IP}:{MCAST_PORT}...")
+    import subprocess
+    import re
     
-    # Run a sub-thread to continuously announce the lamp
+    print(f"Tracking Official App to force-feed the lamp profile...")
+    
     def announce():
         while True:
             try:
-                # Multicast
-                broadcast_sock.sendto(get_ssdp_reply(), (MCAST_GRP, MCAST_PORT))
-                # Direct Unicast to the Official App (bypasses all multicast loopback issues)
-                broadcast_sock.sendto(get_ssdp_reply(), (LOCAL_IP, MCAST_PORT))
-                broadcast_sock.sendto(get_ssdp_reply(), ('127.0.0.1', MCAST_PORT))
+                # 1. Find the PID of the Official App
+                tasklist = subprocess.check_output('tasklist /FI "IMAGENAME eq Yeelight Chroma Connector.exe" /NH', shell=True).decode('utf-8', errors='ignore')
+                match = re.search(r'Yeelight Chroma Connector\.exe\s+(\d+)', tasklist, re.IGNORECASE)
+                if match:
+                    pid = match.group(1)
+                    
+                    # 2. Find all UDP ports for this PID
+                    netstat = subprocess.check_output('netstat -ano', shell=True).decode('utf-8', errors='ignore')
+                    for line in netstat.splitlines():
+                        if "UDP" in line and pid in line:
+                            parts = line.strip().split()
+                            if len(parts) >= 4:
+                                ip_port = parts[1]
+                                if ':' in ip_port:
+                                    port = int(ip_port.split(':')[-1])
+                                    
+                                    # 3. Send the SSDP reply directly to the Official App's UDP port!
+                                    try:
+                                        broadcast_sock.sendto(get_ssdp_reply(), ('127.0.0.1', port))
+                                        broadcast_sock.sendto(get_ssdp_reply(), (LOCAL_IP, port))
+                                    except:
+                                        pass
             except Exception as e:
                 pass
             time.sleep(2)
