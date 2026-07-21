@@ -32,7 +32,7 @@ def get_ssdp_reply():
         "Ext: \r\n"
         f"Location: yeelight://{LOCAL_IP}:{BRIDGE_UDP_PORT}\r\n"
         "Server: POSIX UPnP/1.0 YGLC/1\r\n"
-        "id: 0x0000000012345678\r\n"
+        "id: 0x0000000012a297c3\r\n"
         "model: color\r\n"
         "fw_ver: 35\r\n"
         "support: get_prop set_default set_power toggle set_bright start_cf stop_cf set_scene cron_add cron_get cron_del set_ct_abx udp_sess_new udp_sess_keep_alive udp_new bg_set_rgb bg_set_scene\r\n"
