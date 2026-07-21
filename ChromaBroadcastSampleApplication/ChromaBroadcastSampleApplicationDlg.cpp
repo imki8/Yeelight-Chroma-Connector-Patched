@@ -1588,18 +1588,9 @@ bool CChromaBroadcastSampleApplicationDlg::ParseDiscoveryMSG(char* recv_data, CU
 	char p_IPPort[40] = { 0 };
 	char* p_Port = NULL;
 
-	if (FindValue(recv_data, "support:", strlen("support:") + 1, UdpLight.cSupport) == false)
-	{
-		return false;
-	}
-	if (FindValue(recv_data, "model:", 7, UdpLight.cModel) == false)
-	{
-		return false;
-	}
-	if (FindValue(recv_data, "id:", 4, UdpLight.cDID) == false)
-	{
-		return false;
-	}
+	FindValue(recv_data, "support:", strlen("support:") + 1, UdpLight.cSupport);
+	FindValue(recv_data, "model:", 7, UdpLight.cModel);
+	FindValue(recv_data, "id:", 4, UdpLight.cDID);
 	if (FindValue(recv_data, "yeelight://", 11, p_IPPort) == false)
 	{
 		return false;
@@ -1632,7 +1623,11 @@ bool CChromaBroadcastSampleApplicationDlg::FindValue(char* recv_data, char* p_na
 	p_end = strstr(p_start, "\r\n");
 	if (p_end == NULL)
 	{
-		return false;
+		p_end = strstr(p_start, "\n");
+		if (p_end == NULL)
+		{
+			return false;
+		}
 	}
 
 	memcpy(p_dst, p_start + nameLen, p_end - p_start - nameLen);
@@ -1657,9 +1652,9 @@ bool CChromaBroadcastSampleApplicationDlg::IsAlreadyFound(CUdpLight& p_UdpLight)
 //Filter out unsupported devices
 bool CChromaBroadcastSampleApplicationDlg::IsSupportUDP(CUdpLight& UdpLight)
 {
-	if (strstr(UdpLight.cSupport, "chroma") == NULL && strstr(UdpLight.cModel, "yeelink.light.color3") == NULL)
+	if (strstr(UdpLight.cSupport, "chroma") == NULL && strstr(UdpLight.cModel, "color3") == NULL)
 	{
-		return false;
+		// return false; // DÉSACTIVÉ : On accepte désormais TOUTES les ampoules trouvées !
 	}
 	if (strstr(UdpLight.cSupport, "udp_sess_new") != NULL)
 	{
